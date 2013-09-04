@@ -24,7 +24,7 @@ var sets = {};
 var counter_rates = {};
 var timer_data = {};
 var pctThreshold = null;
-var flushInterval, keyFlushInt, server, mgmtServer;
+var flushInterval, keyFlushInt, udpServer, mgmtServer, tcpServer;
 var startup_time = Math.round(new Date().getTime() / 1000);
 var backendEvents = new events.EventEmitter();
 var healthStatus = config.healthStatus || 'up';
@@ -156,13 +156,12 @@ config.configFile(process.argv[2], function (config, oldConfig) {
   counters[bad_lines_seen]   = 0;
   counters[packets_received] = 0;
 
-  if (server === undefined) {
+  if (udpServer === undefined) {
 
     // key counting
     var keyFlushInterval = Number((config.keyFlush && config.keyFlush.interval) || 0);
 
-    var udp_version = config.address_ipv6 ? 'udp6' : 'udp4';
-    server = dgram.createSocket(udp_version, function (msg, rinfo) {
+    var callback = function (msg, rinfo) {
       backendEvents.emit('packet', msg, rinfo);
       counters[packets_received]++;
       var packet_data = msg.toString();
@@ -238,8 +237,13 @@ config.configFile(process.argv[2], function (config, oldConfig) {
       }
 
       stats.messages.last_msg_seen = Math.round(new Date().getTime() / 1000);
-    });
+    }
+	
+    var udp_version = config.address_ipv6 ? 'udp6' : 'udp4';
+    udpServer = dgram.createSocket(udp_version, callback);
 
+	tcpServer = net.createServer();
+	
     mgmtServer = net.createServer(function(stream) {
       stream.setEncoding('ascii');
 
@@ -349,7 +353,8 @@ config.configFile(process.argv[2], function (config, oldConfig) {
       });
     });
 
-    server.bind(config.port || 8125, config.address || undefined);
+    udpServer.bind(config.port || 8125, config.address || undefined);
+    tcpServer.listen(8120, callback);
     mgmtServer.listen(config.mgmt_port || 8126, config.mgmt_address || undefined);
 
     util.log("server is up");
