@@ -160,8 +160,9 @@ config.configFile(process.argv[2], function (config, oldConfig) {
 
     // key counting
     var keyFlushInterval = Number((config.keyFlush && config.keyFlush.interval) || 0);
-
+	
     var callback = function (msg, rinfo) {
+		
       backendEvents.emit('packet', msg, rinfo);
       counters[packets_received]++;
       var packet_data = msg.toString();
@@ -242,7 +243,17 @@ config.configFile(process.argv[2], function (config, oldConfig) {
     var udp_version = config.address_ipv6 ? 'udp6' : 'udp4';
     udpServer = dgram.createSocket(udp_version, callback);
 
-	tcpServer = net.createServer();
+	tcpServer = net.createServer(function(stream) {
+      stream.setEncoding('ascii');
+	  
+      stream.on('error', function(err) {
+        l.log('Caught ' + err +', Moving on');
+      });
+
+      stream.on('data', function(data) {
+        callback(data.trim(), "");
+	  });
+	});
 	
     mgmtServer = net.createServer(function(stream) {
       stream.setEncoding('ascii');
@@ -354,7 +365,7 @@ config.configFile(process.argv[2], function (config, oldConfig) {
     });
 
     udpServer.bind(config.port || 8125, config.address || undefined);
-    tcpServer.listen(8120, callback);
+    tcpServer.listen(8120);
     mgmtServer.listen(config.mgmt_port || 8126, config.mgmt_address || undefined);
 
     util.log("server is up");
